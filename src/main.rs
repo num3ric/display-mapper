@@ -1,7 +1,7 @@
-use std::{fs, env, mem, cmp};
+use std::{fs, env, cmp};
 use serde::{Deserialize, Serialize};
 use serde_json;
-use image::{GenericImage, SubImage, ImageBuffer, Rgb, RgbImage};
+use image::{GenericImage, ImageBuffer, Rgb, RgbImage};
 use imageproc::{drawing};
 use rusttype::{Font, Scale};
 
@@ -16,39 +16,17 @@ enum Orientation {
 #[derive(Serialize, Deserialize)]
 struct Display {
     name: String,
-    pos: [u32;2],
+    pos: [i32;2],
     size: [u32;2],
     orientation: Orientation,
 }
 
-fn get_gradient( x:u32, y:u32, w:u32, h:u32, orient:&Orientation ) -> [u8;3]
+fn apply_gradient( img: &mut RgbImage )
 {
-    let mut nx = x as f32 / w as f32;
-    let mut ny = y as f32 / h as f32;
-    match orient {
-        Orientation::Landscape => { },
-        Orientation::Portrait => {
-            mem::swap(&mut nx, &mut ny);
-            nx = 1.0 - nx;
-        },
-        Orientation::LandscapeFlipped => {
-            ny = 1.0 - ny;
-        },
-        Orientation::PortraitFlipped => {
-            mem::swap(&mut nx, &mut ny);
-            ny = 1.0 - ny;
-        },
-    }
-
-    [(255.0 * nx) as u8, (255.0 * ny) as u8, 0]
-}
-
-fn apply_gradient( img: &mut RgbImage, display: &Display )
-{
-    let w = display.size[0];
-    let h = display.size[1];
+    let w = img.width();
+    let h = img.height();
     for (x, y, pixel) in img.enumerate_pixels_mut() {
-        *pixel = image::Rgb(get_gradient(x,y,w,h, &display.orientation));
+        *pixel = image::Rgb([(255.0 * x as f32 / w as f32) as u8, (255.0 * y as f32 / h as f32) as u8, 0]);
     }
 }
 
@@ -57,7 +35,7 @@ fn apply_patterns<'a>( img: &mut RgbImage, text: &'a str )
     let white = Rgb([255u8, 255u8, 255u8]);
     let black = Rgb([0u8, 0u8, 0u8]);
 
-    let scale = Scale::uniform( 100.0 );
+    let scale = Scale::uniform( 50.0 );
     let font_data: &[u8] = include_bytes!("../data/consola.ttf");
     let font = Font::from_bytes(font_data).unwrap();
 
@@ -81,19 +59,44 @@ fn apply_patterns<'a>( img: &mut RgbImage, text: &'a str )
 fn process( json: &String ) {
     let display_list: Vec<Display> = serde_json::from_str(json).expect("Failed to parse json.");
 
-    let mut max_w: u32 = 0;
-    let mut max_h: u32 = 0;
-    for display in display_list.iter() {
-        max_w = cmp::max( max_w, display.pos[0] + display.size[0] );
-        max_h = cmp::max( max_h, display.pos[1] + display.size[1] );
-    }
-    let mut canvas = ImageBuffer::new(max_w, max_h);
+    let mut min_x: i32 = std::i32::MAX;
+    let mut min_y: i32 = std::i32::MAX;
+    let mut max_x: i32 = std::i32::MIN;
+    let mut max_y: i32 = std::i32::MIN;
 
     for display in display_list.iter() {
-        let mut subimagebuf = ImageBuffer::new( display.size[0], display.size[1] );
-        apply_gradient( &mut subimagebuf, &display );
-        apply_patterns( &mut subimagebuf, &display.name );
-        canvas.copy_from( &subimagebuf, display.pos[0], display.pos[1] );
+        let mut horizontal: bool = false;
+        match display.orientation {
+            Orientation::Landscape | Orientation::LandscapeFlipped => horizontal = true,
+            _ => { }
+        }
+        let w = display.size[if horizontal { 0 } else { 1 }] as i32;
+        let h = display.size[if horizontal { 1 } else { 0 }] as i32;
+        min_x = cmp::min( min_x, display.pos[0] );
+        min_y = cmp::min( min_y, display.pos[1] );
+        max_x = cmp::max( max_x, display.pos[0] + w );
+        max_y = cmp::max( max_y, display.pos[1] + h );
+    }
+
+
+    let mut canvas = ImageBuffer::new( (max_x - min_x) as u32, (max_y - min_y) as u32);
+    for display in display_list.iter() {
+        let mut displayimg = ImageBuffer::new( display.size[0], display.size[1] );
+        match display.orientation {
+            Orientation::Landscape => { },
+            Orientation::Portrait => {
+                displayimg = image::imageops::rotate90( &displayimg );
+            },
+            Orientation::LandscapeFlipped => {
+                displayimg = image::imageops::rotate180( &displayimg );
+            },
+            Orientation::PortraitFlipped => {
+                displayimg = image::imageops::rotate270( &displayimg );
+            },
+        }
+        apply_gradient( &mut displayimg );
+        apply_patterns( &mut displayimg, &display.name );
+        canvas.copy_from( &displayimg, ( display.pos[0] - min_x ) as u32, (display.pos[1] - min_y ) as u32 );
     }
     // write it out to a file
     canvas.save("output.png").unwrap();

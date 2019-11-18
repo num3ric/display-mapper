@@ -15,12 +15,12 @@
         "name": "Display-1",
         "pos": [
             1920,
-            0
+            -840
         ],
         "size": [
-            640,
-            480
+            1920,
+            1080
         ],
-        "orientation": "Landscape"
+        "orientation": "Portrait"
     }
 ]
