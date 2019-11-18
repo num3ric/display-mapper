@@ -1,6 +1,6 @@
 [
     {
-        "name": "Screen0",
+        "name": "Display-0",
         "pos": [
             0,
             0
@@ -12,7 +12,7 @@
         "orientation": "Landscape"
     },
     {
-        "name": "Screen1",
+        "name": "Display-1",
         "pos": [
             1920,
             0

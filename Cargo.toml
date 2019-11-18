@@ -10,3 +10,5 @@ edition = "2018"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 image = "0.22.3"
+imageproc = "0.19.2"
+rusttype = "0.8.1"

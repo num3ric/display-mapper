@@ -1,7 +1,9 @@
 use std::{fs, env, mem, cmp};
 use serde::{Deserialize, Serialize};
 use serde_json;
-use image::{ImageBuffer};
+use image::{GenericImage, SubImage, ImageBuffer, Rgb, RgbImage};
+use imageproc::{drawing};
+use rusttype::{Font, Scale};
 
 #[derive(Serialize, Deserialize)]
 enum Orientation {
@@ -41,31 +43,39 @@ fn get_gradient( x:u32, y:u32, w:u32, h:u32, orient:&Orientation ) -> [u8;3]
     [(255.0 * nx) as u8, (255.0 * ny) as u8, 0]
 }
 
-fn generate_maps( imgbuf: &mut image::RgbImage, display: &Display )
+fn apply_gradient( img: &mut RgbImage, display: &Display )
 {
-    let offx = display.pos[0];
-    let offy = display.pos[1];
     let w = display.size[0];
     let h = display.size[1];
-    let i = 10;
-    let hi = i/2;
-    // Iterate over the coordinates and pixels of the image
-    for x in offx..(offx+w) {
-        for y in offy..(offy+h) {
-            let pixel = imgbuf.get_pixel_mut(x, y);
-            let white : bool = x % i == 0 && y % i == 0;
-            let black : bool = ( x + hi ) % i == 0 && ( y + hi ) % i == 0;
-            if white {
-                *pixel = image::Rgb([255,255,255]);
-            }
-            else if black {
-                *pixel = image::Rgb([0, 0, 0]);
-            }
-            else {
-                *pixel = image::Rgb(get_gradient(x-offx,y-offy,w,h, &display.orientation));
-            }
+    for (x, y, pixel) in img.enumerate_pixels_mut() {
+        *pixel = image::Rgb(get_gradient(x,y,w,h, &display.orientation));
+    }
+}
+
+fn apply_patterns<'a>( img: &mut RgbImage, text: &'a str )
+{
+    let white = Rgb([255u8, 255u8, 255u8]);
+    let black = Rgb([0u8, 0u8, 0u8]);
+
+    let scale = Scale::uniform( 100.0 );
+    let font_data: &[u8] = include_bytes!("../data/consola.ttf");
+    let font = Font::from_bytes(font_data).unwrap();
+
+    for x in ( 0..img.width() ).step_by( 10 ) {
+        for y in ( 0..img.height() ).step_by( 10 ) {
+            let pixel = img.get_pixel_mut(x, y);
+            *pixel = white;
         }
     }
+
+    for x in ( 5..img.width() ).step_by( 10 ) {
+        for y in ( 5..img.height() ).step_by( 10 ) {
+            let pixel = img.get_pixel_mut(x, y);
+            *pixel = black;
+        }
+    }
+
+    drawing::draw_text_mut( img, white, 100, 100, scale, &font, text );
 }
 
 fn process( json: &String ) {
@@ -77,14 +87,16 @@ fn process( json: &String ) {
         max_w = cmp::max( max_w, display.pos[0] + display.size[0] );
         max_h = cmp::max( max_h, display.pos[1] + display.size[1] );
     }
-    let mut imgbuf = ImageBuffer::new(max_w, max_h);
+    let mut canvas = ImageBuffer::new(max_w, max_h);
 
     for display in display_list.iter() {
-        generate_maps( &mut imgbuf, &display );
+        let mut subimagebuf = ImageBuffer::new( display.size[0], display.size[1] );
+        apply_gradient( &mut subimagebuf, &display );
+        apply_patterns( &mut subimagebuf, &display.name );
+        canvas.copy_from( &subimagebuf, display.pos[0], display.pos[1] );
     }
-   
     // write it out to a file
-    imgbuf.save("output.png").unwrap();
+    canvas.save("output.png").unwrap();
 }
 
 fn main() {
