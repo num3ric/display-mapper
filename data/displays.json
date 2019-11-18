@@ -1,12 +1,26 @@
-{
-    "id": 3,
-    "pos": [
-        0,
-        0
-    ],
-    "size": [
-        1920,
-        1080
-    ],
-    "orientation": "PortraitFlipped"
-}
+[
+    {
+        "name": "Screen0",
+        "pos": [
+            0,
+            0
+        ],
+        "size": [
+            1920,
+            1080
+        ],
+        "orientation": "Landscape"
+    },
+    {
+        "name": "Screen1",
+        "pos": [
+            1920,
+            0
+        ],
+        "size": [
+            640,
+            480
+        ],
+        "orientation": "Landscape"
+    }
+]
