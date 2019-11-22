@@ -1,11 +1,11 @@
-use std::{fs, env, cmp};
+use std::{fs, env, cmp, fmt};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use image::{GenericImage, ImageBuffer, Rgb, RgbImage};
 use imageproc::{drawing};
 use rusttype::{Font, Scale};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 enum Orientation {
     Landscape,
     Portrait,
@@ -13,9 +13,16 @@ enum Orientation {
     PortraitFlipped,
 }
 
+impl fmt::Display for Orientation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
+    }
+}
+
 #[derive(Serialize, Deserialize)]
-struct Display {
+struct DisplayInfo {
     name: String,
+    framerate: String,
     pos: [i32;2],
     size: [u32;2],
     orientation: Orientation,
@@ -30,34 +37,35 @@ fn apply_gradient( img: &mut RgbImage )
     }
 }
 
-fn apply_patterns<'a>( img: &mut RgbImage, text: &'a str )
+fn apply_patterns( img: &mut RgbImage, display: &DisplayInfo )
 {
     let white = Rgb([255u8, 255u8, 255u8]);
     let black = Rgb([0u8, 0u8, 0u8]);
-
-    let scale = Scale::uniform( 50.0 );
-    let font_data: &[u8] = include_bytes!("../data/consola.ttf");
-    let font = Font::from_bytes(font_data).unwrap();
-
     for x in ( 0..img.width() ).step_by( 10 ) {
         for y in ( 0..img.height() ).step_by( 10 ) {
             let pixel = img.get_pixel_mut(x, y);
             *pixel = white;
         }
     }
-
     for x in ( 5..img.width() ).step_by( 10 ) {
         for y in ( 5..img.height() ).step_by( 10 ) {
             let pixel = img.get_pixel_mut(x, y);
             *pixel = black;
         }
     }
+    let font_data: &[u8] = include_bytes!("../data/consola.ttf");
+    let font = Font::from_bytes(font_data).unwrap();
+    drawing::draw_text_mut( img, white, 100, 100, Scale::uniform( 50.0 ), &font, &display.name );
 
-    drawing::draw_text_mut( img, white, 100, 100, scale, &font, text );
+    let ws = display.size[0].to_string();
+    let hs = display.size[1].to_string();
+    let orientation = display.orientation.to_string();
+    let info_str = ["[", &ws, ", ", &hs, "], ", &display.framerate, ". ", &orientation ].concat();
+    drawing::draw_text_mut( img, white, 100, 150, Scale::uniform( 25.0 ), &font, &info_str );
 }
 
 fn process( json: &String ) {
-    let display_list: Vec<Display> = serde_json::from_str(json).expect("Failed to parse json.");
+    let display_list: Vec<DisplayInfo> = serde_json::from_str(json).expect("Failed to parse json.");
 
     let mut min_x: i32 = std::i32::MAX;
     let mut min_y: i32 = std::i32::MAX;
@@ -95,7 +103,7 @@ fn process( json: &String ) {
             },
         }
         apply_gradient( &mut displayimg );
-        apply_patterns( &mut displayimg, &display.name );
+        apply_patterns( &mut displayimg, &display );
         canvas.copy_from( &displayimg, ( display.pos[0] - min_x ) as u32, (display.pos[1] - min_y ) as u32 );
     }
     // write it out to a file
