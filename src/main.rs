@@ -26,6 +26,7 @@ struct DisplayInfo {
     pos: [i32;2],
     size: [u32;2],
     orientation: Orientation,
+    empty: bool
 }
 
 fn apply_gradient( img: &mut RgbImage )
@@ -60,7 +61,7 @@ fn apply_patterns( img: &mut RgbImage, display: &DisplayInfo )
     let ws = display.size[0].to_string();
     let hs = display.size[1].to_string();
     let orientation = display.orientation.to_string();
-    let info_str = ["[", &ws, ", ", &hs, "], ", &display.framerate, ". ", &orientation ].concat();
+    let info_str = ["[", &ws, ", ", &hs, "], ", &display.framerate, ", ", &orientation ].concat();
     drawing::draw_text_mut( img, white, 100, 150, Scale::uniform( 25.0 ), &font, &info_str );
 }
 
@@ -102,8 +103,10 @@ fn process( json: &String ) {
                 displayimg = image::imageops::rotate270( &displayimg );
             },
         }
-        apply_gradient( &mut displayimg );
-        apply_patterns( &mut displayimg, &display );
+        if ! display.empty {
+            apply_gradient( &mut displayimg );
+            apply_patterns( &mut displayimg, &display );
+        }
         canvas.copy_from( &displayimg, ( display.pos[0] - min_x ) as u32, (display.pos[1] - min_y ) as u32 );
     }
     // write it out to a file
